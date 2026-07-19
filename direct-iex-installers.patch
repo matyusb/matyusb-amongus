@@ -1,0 +1,100 @@
+--- a/scripts/TOU-Mira-Telepito-Steam.ps1
++++ b/scripts/TOU-Mira-Telepito-Steam.ps1
+@@ -14,6 +14,7 @@
+ $DesktopTarget = Join-Path $DesktopPath 'Among Us - TOU Mira'
+ $SteamCmdUrl = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip'
+ $ReleasesApi = 'https://api.github.com/repos/AU-Avengers/TOU-Mira/releases?per_page=20'
++$RemoteInstallerUrl = 'https://matyusb.org/steam'
+ 
+ $TempRoot = Join-Path ([IO.Path]::GetTempPath()) ('TOU-Mira-Steam-AllInOne-' + [Guid]::NewGuid().ToString('N'))
+ $SteamCmdZip = Join-Path $TempRoot 'steamcmd.zip'
+@@ -176,23 +177,19 @@
+ }
+ 
+ # A Program Files mappa irasahoz rendszergazdai jog kell.
+-# Biztonsagi okbol a tavoli iwr | iex futtatasi mod nincs tamogatva.
++# Helyi .ps1 futtatasnal a helyi fajl indul ujra. iwr | iex futtatasnal
++# ugyanaz a teljes telepito URL indul ujra a rendszergazdai PowerShellben.
+ if (-not (Test-IsAdministrator)) {
+-    if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+-        Write-Host ''
+-        Write-Host 'Ez a telepito nem futtathato iwr | iex modon.' -ForegroundColor Red
+-        Write-Host 'Toltsd le a GitHub Release oldalrol, ellenorizd a SHA-256 osszeget, majd futtasd helyi .ps1 fajlkent.' -ForegroundColor Yellow
+-        return
+-    }
+-
+     Write-Host 'Rendszergazdai engedely szukseges a Steam Among Us mappa modositasahoz.' -ForegroundColor Yellow
+ 
+-    $ScriptPathEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($PSCommandPath))
+     $DesktopPathEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($DesktopPath))
+     $GamePathEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($GamePath))
+     $BetaBranchEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($BetaBranch))
+ 
+-    $ElevatedCommand = @"
++    if (-not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
++        $ScriptPathEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($PSCommandPath))
++
++        $ElevatedCommand = @"
+ `$ErrorActionPreference = 'Stop'
+ `$scriptPath = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$ScriptPathEncoded'))
+ `$desktopPath = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$DesktopPathEncoded'))
+@@ -209,6 +206,39 @@
+     Read-Host 'Nyomj Entert a bezarashoz'
+ }
+ "@
++    }
++    else {
++        $RemoteUrlEncoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($RemoteInstallerUrl))
++
++        $ElevatedCommand = @"
++`$ErrorActionPreference = 'Stop'
++`$ProgressPreference = 'SilentlyContinue'
++[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
++`$installerUrl = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$RemoteUrlEncoded'))
++`$desktopPath = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$DesktopPathEncoded'))
++`$gamePath = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$GamePathEncoded'))
++`$betaBranch = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('$BetaBranchEncoded'))
++`$tempInstaller = Join-Path ([IO.Path]::GetTempPath()) ('TOU-Mira-Steam-Elevated-' + [Guid]::NewGuid().ToString('N') + '.ps1')
++
++try {
++    Invoke-WebRequest -Uri `$installerUrl -UseBasicParsing -OutFile `$tempInstaller
++    if (-not (Test-Path -LiteralPath `$tempInstaller -PathType Leaf) -or (Get-Item -LiteralPath `$tempInstaller).Length -eq 0) {
++        throw 'Az installer URL ures vagy hianyzo fajlt adott.'
++    }
++
++    & `$tempInstaller -DesktopPath `$desktopPath -GamePath `$gamePath -BetaBranch `$betaBranch
++}
++catch {
++    Write-Host ''
++    Write-Host 'Nem sikerult letolteni vagy elinditani a telepitot rendszergazdakent:' -ForegroundColor Red
++    Write-Host `$_.Exception.Message -ForegroundColor Red
++    Read-Host 'Nyomj Entert a bezarashoz'
++}
++finally {
++    Remove-Item -LiteralPath `$tempInstaller -Force -ErrorAction SilentlyContinue
++}
++"@
++    }
+ 
+     $EncodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($ElevatedCommand))
+ 
+--- a/scripts/TOU-Mira-Telepito-Epic-Games.ps1
++++ b/scripts/TOU-Mira-Telepito-Epic-Games.ps1
+@@ -5,15 +5,8 @@
+ 
+ [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+ 
+-# Biztonsagi okbol az iwr | iex futtatasi mod nincs tamogatva.
+-# Toltsd le a .ps1 fajlt, ellenorizd a kiadashoz tartozo SHA256SUMS.txt fajllal,
+-# majd helyi fajlkent futtasd.
+-if ([string]::IsNullOrWhiteSpace($PSCommandPath)) {
+-    Write-Host ''
+-    Write-Host 'Ez a telepito nem futtathato iwr | iex modon.' -ForegroundColor Red
+-    Write-Host 'Toltsd le a GitHub Release oldalrol, ellenorizd a SHA-256 osszeget, majd futtasd helyi .ps1 fajlkent.' -ForegroundColor Yellow
+-    return
+-}
++# A fajl helyi .ps1-kent es a matyusb.org rovid URL-rol iwr | iex modon is futtathato.
++# A telepites elott mindig megjelenik a figyelmeztetes es az ELFOGADOM megerosites.
+ 
+ $downgraderUrl = 'https://github.com/whichtwix/EpicGamesDowngrader/releases/download/2026.3.31/DowngradeEpic.ps1'
+ $releasesApi = 'https://api.github.com/repos/AU-Avengers/TOU-Mira/releases?per_page=20'
