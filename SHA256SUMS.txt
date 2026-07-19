@@ -1,2 +1,2 @@
-40b921034b87ad1f8a5942e0caf80cd6ef3d7b14a29e05f59d5fbed03276ed32  TOU-Mira-Telepito-Epic-Games.ps1
-258fd9ce80ac0e10a8d059dabb3fe792a08e37251f8141fc176b4d69a8053458  TOU-Mira-Telepito-Steam.ps1
+c75e7db92b57283c8c8f7032d89b44781242e6599383198e1a47ea61837f475f TOU-Mira-Telepito-Epic-Games.ps1
+39fb10aa11e13a84e096b9f2791d0f25ed4b42712b61c0edb90399dfd5b239f3  TOU-Mira-Telepito-Steam.ps1
