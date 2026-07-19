@@ -2,8 +2,14 @@ name: Release checksums
 
 on:
   release:
-    types:
-      - published
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to process"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,40 +20,62 @@ jobs:
 
     steps:
       - name: Download assets and upload SHA256SUMS.txt
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MANUAL_TAG: ${{ inputs.release_tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
 
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            RELEASE_TAG="$MANUAL_TAG"
+          else
+            RELEASE_TAG="$EVENT_TAG"
+          fi
+
           echo "Release tag: $RELEASE_TAG"
 
-          mkdir -p release-assets
+          # Confirm that the release exists.
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            >/dev/null
 
+          rm -rf release-assets
+          mkdir release-assets
+
+          # Download every existing release asset.
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --dir release-assets
 
           cd release-assets
 
-          find . \
-            -maxdepth 1 \
-            -type f \
-            ! -name "SHA256SUMS.txt" \
-            -printf '%P\0' \
-            | sort -z \
-            | xargs -0 sha256sum \
+          # Exclude an old checksum file when regenerating it.
+          mapfile -d '' files < <(
+            find . \
+              -maxdepth 1 \
+              -type f \
+              ! -name 'SHA256SUMS.txt' \
+              -print0 |
+            sort -z
+          )
+
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::The release has no downloadable assets."
+            exit 1
+          fi
+
+          sha256sum "${files[@]}" |
+            sed 's#  \./#  #' \
             > ../SHA256SUMS.txt
 
           cd ..
 
-          if [ ! -s SHA256SUMS.txt ]; then
-            echo "Nem találhatók release assetek."
-            exit 1
-          fi
-
+          echo "Generated checksums:"
           cat SHA256SUMS.txt
 
-          gh release upload "$RELEASE_TAG" SHA256SUMS.txt \
+          gh release upload "$RELEASE_TAG" \
+            SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
